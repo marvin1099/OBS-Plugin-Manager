@@ -1,27 +1,33 @@
 {
     "url-match": [
         {
-            "has": "/%1/%2/*/*macos*.zip",
+            "has": "**macos*.zip",
             "os": "macos",
             "return": true
         },
         {
-            "has": "/%1/%2/*/*darwin*.zip",
+            "has": "**darwin*.zip",
             "os": "macos",
             "return": true
         },
         {
-            "has": "/%1/%2/*/*linux*.zip",
+            "has": "**linux*.zip",
             "os": "linux",
             "return": true
         },
         {
-            "has": "/%1/%2/*/*.zip",
+            "has": "**.zip",
             "os": "windows",
             "return": true
         },
         {
-            "overwrite": "/%1/%2/releases/latest",
+            "overwrite": "https://api.%0/repos/%1/%2/releases/latest",
+            "type": "releases",
+            "follow": true
+        },
+        {
+            "overwrite": "https://api.%0/repos/%1/%2",
+            "type": "repo",
             "follow": true
         }
     ],
