@@ -1,0 +1,33 @@
+{
+    "url-match": [
+        {
+            "has": "/%1/%2/*/*macos*.zip",
+            "os": "macos",
+            "return": true
+        },
+        {
+            "has": "/%1/%2/*/*darwin*.zip",
+            "os": "macos",
+            "return": true
+        },
+        {
+            "has": "/%1/%2/*/*linux*.zip",
+            "os": "linux",
+            "return": true
+        },
+        {
+            "has": "/%1/%2/*/*.zip",
+            "os": "windows",
+            "return": true
+        },
+        {
+            "overwrite": "/%1/%2/releases/latest",
+            "follow": true
+        }
+    ],
+    "pages": {
+        "github.com": {
+            "url-match": []
+        }
+    }
+}
