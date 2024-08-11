@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import os
+import re
 import json
 import time
 import fnmatch
@@ -32,7 +33,6 @@ class OSManager: # Get corect read only values for the active os
     @property
     def plugins_path(self):
         return os.path.join(self.data_base(), "obs-studio", "plugins")
-
 
 
 class ConfigManager: # manage the config json files
@@ -235,7 +235,7 @@ class ConfigManager: # manage the config json files
 
     @platforms.setter
     def platforms(self, platform_data):
-        self.plugins_config = {"platforms_data": data}
+        self.plugins_config = {"platforms_data": platform_data}
 
     @platforms.deleter
     def platforms(self, deletion_path=[]):
@@ -275,7 +275,160 @@ class ConfigManager: # manage the config json files
 
 
 class OBSPluginPageParser(HTMLParser):
-    def __init__(self, url):
+    def __init__(self):
+        super().__init__()
+        self.some_data = False
+        self.found_source = False
+        self.found_bit = False
+        self.found_minimum = False
+        self.found_platform = False
+        self.plugin = {
+            'source':None,
+            'bits':[],
+            'minimum':None,
+            'platforms':[]
+        }
+
+    def handle_starttag(self, tag, attrs):
+        attrs_dict = dict(attrs)
+        if tag == 'dl' and 'class' in attrs_dict:
+            if 'pairs pairs--columns pairs--fixedSmall pairs--customField' in attrs_dict['class']:
+                self.some_data = True
+
+    def handle_endtag(self, tag):
+        if tag == 'dl':
+            self.some_data = False
+            self.found_source = False
+            self.found_bit = False
+            self.found_minimum = False
+            self.found_platform = False
+
+    def handle_data(self, data):
+        data = data.strip()
+        if self.some_data and data:
+            if 'bit versions' in data.lower():
+                self.found_bit = True
+            elif 'source code' in data.lower():
+                self.found_source = True
+            elif 'minimum obs studio version' in data.lower():
+                self.found_minimum = True
+            elif 'supported platforms' in data.lower():
+                self.found_platform = True
+
+            elif self.found_bit:
+                self.plugin['bits'].append(data)
+            elif self.found_source:
+                self.plugin['source'] = data
+            elif self.found_minimum:
+                self.plugin['minimum'] = data
+            elif self.found_platform:
+                self.plugin['platforms'].append(data.replace(" ",""))
+
+
+class OBSPluginDownloader:
+    def __init__(self,CFM):
+        self.CFM = CFM
+
+    def remove_plugin(self,plugin_id,plugin_data):
+        pass
+
+    def get_more_plugin_info(self,plugin_data):
+        url = plugin_data.get("url")
+        if not url:
+            print(f"The plugin with id {plugin_id} has no url, skipping")
+            return
+
+        with request.urlopen(url) as response: # get additonal plugin info
+            html_content = response.read().decode('utf-8')
+            parser = OBSPluginPageParser()
+            parser.feed(html_content)
+
+        dl_url = url + "download"
+        try:
+            with request.urlopen(dl_url): # get additonal download source
+                final_url = response.geturl()
+                if final_url and final_url not in dl_url and dl_url not in final_url:
+                    parser.plugin.update({"dl_link":final_url})
+                else:
+                    parser.plugin.update({"dl_link":None})
+        except Exception as e:
+            parser.plugin.update({"dl_link":None})
+
+        #self.CFM.online_cached_plugins = {plugin_id:parser.plugin} # save additonal info on plugin
+
+        plugin_data.update(parser.plugin)
+        return plugin_data
+
+    def wildcard_to_regex(self,pattern):
+        # Escape special regex characters except for *, **
+        pattern = re.escape(pattern)
+
+        # Replace \*\* with a regex that matches anything (including /)
+        pattern = pattern.replace(r'\*\*', '.*')
+
+        # Replace \* with a regex that matches anything except /
+        pattern = pattern.replace(r'\*', '[^/]*')
+
+        # Add start and end anchors
+        pattern = '^' + pattern + '$'
+
+        return re.compile(pattern)
+
+    def installer_rules(self,plugin_data,platforms):
+        urls = []
+        main_url = plugin_data["dl_link"]
+        if main_url:
+            urls.append(main_url)
+        bac_url = plugin_data["source"]
+        if bac_url:
+            urls.append(bac_url)
+
+        worked = False
+        for url in urls:
+            https, base_url = (url+"//").split("//",1)
+            if base_url == "":
+                base_url = str(https)
+                https = "https://"
+            else:
+                base_url = base_url[:-2]
+                https = https + "//"
+
+        page, uri = (base_url + "/").split("/",1)
+        if len(uri) > 0:
+            uri = uri[:-1]
+
+        pages = platforms.get("pages")
+        if pages and page in pages.keys():
+            pattern_rules = {}
+            pattern_rules.update(platforms.get("url-match",{}))
+            pattern_rules.update(pages.get(page,{}))
+            for nr, rule in pattern_rules.items():
+                has = rule.get("has")
+                os = rule.get("os")
+                ret = rule.get("return")
+                over = rule.get("overwrite")
+                typ = rule.get("type")
+                follow = rule.get("follow")
+                if has:
+                    regex = self.wildcard_to_regex(has)
+                    if regex.match(uri) and isinstance(os,str) and platform.system().lower() in os.lower().replace("macos","darwin") and ret and ret == True:
+                        print("download and unzip if needed to plugin dir, HERE")
+                if over:
+                    print("overwrite url and find the correct file to download, then unzip if needed to plugin dir, HERE")
+
+
+    def install_plugin(self,plugin_id,plugin_data):
+        installed = self.CFM.installed_plugins.get(plugin_id,{})
+
+        plugin_data = self.get_more_plugin_info(plugin_data)
+
+        platforms_data = self.CFM.platforms
+
+        self.installer_rules(plugin_data, platforms_data)
+
+
+class OBSPluginsPageParser(HTMLParser):
+    def __init__(self,url):
         super().__init__()
         self.plugins = {}
         self.default_plugin = {
@@ -393,10 +546,6 @@ class OBSPluginPageParser(HTMLParser):
         print(str(message))
 
 
-class OBSPluginDownloader:
-    def __init__(self, plugins_dict):
-        pass
-
 class OBSPluginManager:
     def __init__(self, CFM):
         self.CFM = CFM
@@ -432,7 +581,7 @@ class OBSPluginManager:
             with request.urlopen(url) as response:
                 print("Getting Plugin Page: " + str(self.plugin_active_page))
                 html_content = response.read().decode('utf-8')
-                parser = OBSPluginPageParser(CFM.plugin_forum_url)
+                parser = OBSPluginsPageParser(CFM.plugin_forum_url)
                 parser.feed(html_content)
                 self.plugin_last_page = parser.last_page # update last page
                 return parser.plugins
@@ -445,6 +594,9 @@ class OBSPluginManager:
         if plugins is None:
             plugin = installed_plugins
         online_plugins = self.CFM.online_cached_plugins
+
+        OPD = OBSPluginDownloader(self.CFM)
+
         for plugin_id, plugin in plugins.items():
             online_data = online_plugins.get(plugin_id,{})
             installed_data = installed_plugins.get(plugin_id,{})
@@ -456,15 +608,12 @@ class OBSPluginManager:
                     plugin.update(installed_data)
                     installed_data = plugin
             if remove and installed_data:
-                print(f"Remove plugin with id {plugin_id} {installed_data} here")
+                #print(f"Remove plugin with id {plugin_id} {installed_data} here")
+                OPD.remove_plugin(plugin_id,installed_data)
             elif online_data:
-                print(f"Install / Update plugin with id {plugin_id} {online_data} here")
-            # platform = plugin['platform']
-            # repo = plugin['repo']
-            # plugin_name = plugin['name']
-            # version_file = os.path.join(self.plugins_dir, f"{plugin_name}_version.txt")
-            # downloader = OBSPluginDownloader(platform, repo, plugin_name, self.plugins_dir, version_file, self.platforms)
-            # downloader.update_plugin()
+                #print(f"Install / Update plugin with id {plugin_id} {online_data} here")
+                OPD.install_plugin(plugin_id,online_data)
+
 
     def query_plugin_data(self, data, query):
         found_plugins = {}
