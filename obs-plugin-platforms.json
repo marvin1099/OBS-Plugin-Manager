@@ -1,39 +1,39 @@
 {
-    "url-match": [
-        {
+    "url-match": {
+        "1":{
             "has": "**macos*.zip",
             "os": "macos",
             "return": true
         },
-        {
+        "2":{
             "has": "**darwin*.zip",
             "os": "macos",
             "return": true
         },
-        {
+        "3":{
             "has": "**linux*.zip",
             "os": "linux",
             "return": true
         },
-        {
+        "4":{
             "has": "**.zip",
             "os": "windows",
             "return": true
         },
-        {
+        "5":{
             "overwrite": "https://api.%0/repos/%1/%2/releases/latest",
             "type": "releases",
             "follow": true
         },
-        {
+        "6":{
             "overwrite": "https://api.%0/repos/%1/%2",
             "type": "repo",
             "follow": true
         }
-    ],
+    },
     "pages": {
         "github.com": {
-            "url-match": []
+            "url-match": {}
         }
     }
 }
