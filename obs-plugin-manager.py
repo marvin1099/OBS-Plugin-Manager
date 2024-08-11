@@ -13,7 +13,7 @@ from urllib import request
 #PLUGINS_DIR = os.path.expanduser("~/.config/obs-studio/plugins/")
 #INSTALLED_PLUGINS_FILE = os.path.join(CONFIG_DIR, "installed_plugins.json")
 
-class OSManager: # Get corect values for the active os
+class OSManager: # Get corect read only values for the active os
     def __init__(self):
         self.system = platform.system()
 
@@ -25,58 +25,91 @@ class OSManager: # Get corect values for the active os
         else:
             return os.path.expanduser("~/.config")
 
-    def get_config_path(self):
+    @property
+    def config_path(self):
         return os.path.join(self.data_base(), "obs-plugin-manager")
 
-    def get_plugins_path(self):
+    @property
+    def plugins_path(self):
         return os.path.join(self.data_base(), "obs-studio", "plugins")
 
+
+
 class ConfigManager: # manage the config json files
-    def __init__(self, config_path):
+    def __init__(self, config_path, plugins_path):
         self.config_path = config_path
-        self.plugins_file = os.path.join(self.config_path, "obs-plugin-manager.json")
-        self.save_plugins_config(
-            {
-                "platforms_file_url": "https://codeberg.org/marvin1099/OBS-Plugin-Manager/raw/branch/data/obs-plugin-platforms.json",
-                "platform_refresh_time": 86400,
-                "platform_cache_time": 0,
-                "plugin_forum_url": "https://obsproject.com",
-                "plugin_forum_page_request": "/forum/plugins/?page=",
-                "plugin_soft_refresh_time": 86400,
-                "plugin_soft_cache_time": 0,
-                "plugin_refresh_time": 604800,
-                "plugin_cache_time": 0,
-            },
-            loaded_file_priority=True
-        )
-        data = self.load_plugins_config()
-        self.platforms_file_url = data["platforms_file_url"]
-        self.platform_refresh_time = data["platform_refresh_time"]
-        self.platform_cache_time = data["platform_cache_time"]
-        self.plugin_forum_url = data["plugin_forum_url"]
-        self.plugin_forum_page_request = data["plugin_forum_page_request"]
-        self.plugin_soft_refresh_time = data["plugin_soft_refresh_time"]
-        self.plugin_soft_cache_time = data["plugin_soft_cache_time"]
-        self.plugin_refresh_time = data["plugin_refresh_time"]
-        self.plugin_cache_time = data["plugin_cache_time"]
+        self.plugins_path = plugins_path
+        self.config_file = "obs-plugin-manager.json"
 
-    def update_config_file(self, file_path):
-        if os.path.isabs(file_path):
-            self.plugins_file = file_path
+        config = self.plugins_config
+        self.user_plugins_path = config.get("user_plugins_path","")
+        self.platforms_file_url = config.get("platforms_file_url","https://codeberg.org/marvin1099/OBS-Plugin-Manager/raw/branch/data/obs-plugin-platforms.json")
+        self.platform_refresh_time = config.get("platform_refresh_time",86400)
+        self.platform_cache_time = config.get("platform_cache_time",0)
+        self.plugin_forum_url = config.get("plugin_forum_url","https://obsproject.com")
+        self.plugin_forum_page_request = config.get("plugin_forum_page_request","/forum/plugins/?page=")
+        self.plugin_soft_refresh_time = config.get("plugin_soft_refresh_time",86400)
+        self.plugin_soft_cache_time = config.get("plugin_soft_cache_time",0)
+        self.plugin_refresh_time = config.get("plugin_refresh_time",604800)
+        self.plugin_cache_time = config.get("plugin_cache_time",0)
+
+    @property
+    def config_file(self):
+        path = self._config_file
+        if os.path.isabs(path):
+            return path
         else:
-            self.plugins_file = os.path.join(self.config_path, file_path)
+            return os.path.join(self.config_path, path)
 
-    def update_platforms_file_url(self, url):
-        self.plugin_forum_url = url
-        self.save_plugins_config({"platforms_file_url": url})
+    @config_file.setter
+    def config_file(self, file_path):
+        if os.path.isabs(file_path):
+            self._config_file = file_path
+        else:
+            self._config_file = os.path.join(self.config_path, file_path)
 
-    def update_plugin_forum_url(self, url):
-        self.plugin_forum_url = url
-        self.save_plugins_config({"plugin_forum_url": url})
+    @property
+    def user_plugins_path(self):
+        path = self._user_plugins_path
+        if os.path.isabs(path):
+            return path
+        else:
+            return os.path.join(self.plugins_path, path)
 
-    def update_plugin_forum_page_request(self, url):
-        self.plugin_forum_page_request = url
-        self.save_plugins_config({"plugin_forum_page_request": url})
+    @user_plugins_path.setter
+    def user_plugins_path(self, path):
+        if os.path.isabs(path):
+            self._user_plugins_path = os.path.relpath(path, self.plugins_path)
+        else:
+            self._user_plugins_path = path
+        self.plugins_config = {"user_plugins_path": self._user_plugins_path}
+
+    @property
+    def platforms_file_url(self):
+        return self._platforms_file_url
+
+    @platforms_file_url.setter
+    def platforms_file_url(self, url):
+        self._platforms_file_url = url
+        self.plugins_config = {"platforms_file_url": url}
+
+    @property
+    def plugin_forum_url(self):
+        return self._plugin_forum_url
+
+    @plugin_forum_url.setter
+    def plugin_forum_url(self, url):
+        self._plugin_forum_url = url
+        self.plugins_config = {"plugin_forum_url": url}
+
+    @property
+    def plugin_forum_page_request(self):
+        return self._plugin_forum_page_request
+
+    @plugin_forum_page_request.setter
+    def plugin_forum_page_request(self, url):
+        self._plugin_forum_page_request = url
+        self.plugins_config = {"plugin_forum_page_request": url}
 
     def load_json(self, filepath):
         if os.path.exists(filepath):
@@ -127,84 +160,118 @@ class ConfigManager: # manage the config json files
                 merged[key] = d2[key]
         return merged
 
-    def load_plugins_config(self):
-        return self.load_json(self.plugins_file)
+    @property # load
+    def plugins_config(self):
+        return self.load_json(self.config_file)
 
-    def save_plugins_config(self, data, loaded_file_priority=False):
-        loaded_data = self.load_json(self.plugins_file)
+    @plugins_config.setter #save
+    def plugins_config(self, data, loaded_file_priority=False):
+        loaded_data = self.load_json(self.config_file)
 
         # if merge then loaded_data priority
         # when setting defaut merge will be true
         merged_data = self.merge_dicts(loaded_data, data, loaded_file_priority)
 
-        self.save_json(self.plugins_file, merged_data)
+        self.save_json(self.config_file, merged_data)
 
-    def delete_plugins_config_entry(self, deletion_path):
-        loaded_data = self.load_plugins_config()
-        current = loaded_data
-
-        try:
-            for key in deletion_path[:-1]:
-                current = current[key]
-
-            del current[deletion_path[-1]]
-        except (KeyError, IndexError, TypeError) as e:
-            print(f"Failed to delete path {deletion_path}: {e}")
+    @plugins_config.deleter #delete
+    def plugins_config(self, deletion_path=None):
+        if deletion_path is None:
+            # If no path is given, clear the entire config
+            config = {}
         else:
-            self.save_json(self.plugins_file, loaded_data)
+            # Navigate through the dictionary to delete the specific path
+            config = self.plugins_config
+            current = config
+            try:
+                for key in deletion_path[:-1]:
+                    current = current[key]
 
-    def load_installed_plugins(self): # get list of plugins
-        return self.load_plugins_config().get("plugins",{})
+                del current[deletion_path[-1]]
+            except Exception as e:
+                print(f"Failed to delete path {deletion_path}: {e}")
 
-    def save_installed_plugins(self, data): # save to list of plugins
-        self.save_plugins_config({"plugins":data})
+        # Save the updated configuration
+        self.save_json(self.config_file, config)
 
-    def delete_installed_plugins(self, deletion_path):
-        self.delete_plugins_config_entry(["plugins"] + deletion_path)
+    @property
+    def installed_plugins(self): # get list of plugins
+        return self.plugins_config.get("plugins",{})
 
-    def update_platform_cache_time(self, unix_time):
-        self.platform_cache_time = unix_time
-        self.save_plugins_config({"platform_cache_time":unix_time})
+    @installed_plugins.setter
+    def installed_plugins(self, data): # save to list of plugins
+        self.plugins_config = {"plugins":data}
 
-    def load_platforms(self):
+    @installed_plugins.deleter
+    def installed_plugins(self, deletion_path=[]):
+        deleter = self.__class__.plugins_config.fdel
+        deleter(self, ["plugins"] + deletion_path)
+
+    @property
+    def platform_cache_time(self):
+        return self._platform_cache_time
+
+    @platform_cache_time.setter
+    def platform_cache_time(self, unix_time):
+        self._platform_cache_time = unix_time
+        self.plugins_config = {"platform_cache_time":unix_time}
+
+    @property
+    def platforms(self):
         unix_time = int(time.time())
         div_time = unix_time - int(self.platform_cache_time)
-        platforms_local = self.load_plugins_config().get("platforms_data",{})
+        platforms_local = self.plugins_config.get("platforms_data",{})
         if div_time > self.platform_refresh_time:
             try:
                 with request.urlopen(self.platforms_file_url) as response:
                     platforms_data = json.loads(response.read())
-                    self.save_platforms(platforms_data)
                     self.platform_cache_time = unix_time
-                    self.update_plugin_cache_time(unix_time)
+                    self.platforms = platforms_data
                     return platforms_data
             except Exception as e:
                 return platforms_local
         else:
             return platforms_local
 
-    def save_platforms(self, platform_data):
-        self.save_plugins_config({"platforms_data": data})
+    @platforms.setter
+    def platforms(self, platform_data):
+        self.plugins_config = {"platforms_data": data}
 
-    def delete_platforms(self, deletion_path=[]):
-        self.delete_plugins_config_entry(["platforms_data"] + deletion_path)
+    @platforms.deleter
+    def platforms(self, deletion_path=[]):
+        deleter = self.__class__.plugins_config.fdel
+        deleter(self, ["platforms_data"] + deletion_path)
 
-    def update_plugin_cache_time(self, unix_time):
-        self.plugin_cache_time = unix_time
-        self.save_plugins_config({"plugin_cache_time":unix_time})
+    @property
+    def plugin_cache_time(self):
+        return self._plugin_cache_time
 
-    def update_plugin_soft_cache_time(self, unix_time):
-        self.plugin_soft_cache_time = unix_time
-        self.save_plugins_config({"plugin_soft_cache_time":unix_time})
+    @plugin_cache_time.setter
+    def plugin_cache_time(self, unix_time):
+        self._plugin_cache_time = unix_time
+        self.plugins_config = {"plugin_cache_time":unix_time}
 
-    def load_online_cached_plugins(self): # get list of plugins
-        return self.load_plugins_config().get("online_cached_plugins",{})
+    @property
+    def plugin_soft_cache_time(self):
+        return self._plugin_soft_cache_time
 
-    def save_online_cached_plugins(self, data): # save to list of plugins
-        self.save_plugins_config({"online_cached_plugins":data})
+    @plugin_soft_cache_time.setter
+    def plugin_soft_cache_time(self, unix_time):
+        self._plugin_soft_cache_time = unix_time
+        self.plugins_config = {"plugin_soft_cache_time":unix_time}
 
-    def delete_online_cached_plugins(self, deletion_path=[]):
-        self.delete_plugins_config_entry(["online_cached_plugins"] + deletion_path)
+    @property
+    def online_cached_plugins(self): # get list of plugins
+        return self.plugins_config.get("online_cached_plugins",{})
+
+    @online_cached_plugins.setter
+    def online_cached_plugins(self, data): # save to list of plugins
+        self.plugins_config = {"online_cached_plugins":data}
+
+    @online_cached_plugins.deleter
+    def online_cached_plugins(self, deletion_path=[]):
+        deleter = self.__class__.plugins_config.fdel
+        deleter(self, ["online_cached_plugins"] + deletion_path)
 
 
 class OBSPluginPageParser(HTMLParser):
@@ -222,6 +289,8 @@ class OBSPluginPageParser(HTMLParser):
             'downloads': None,
             'url': None,
         }
+        self.default_plugin["downloads"] = 0 # defaut to 0 for downloads # may remove in future
+
         self.current_plugin = dict(self.default_plugin)
         self.url = url
         self.last_page = 1
@@ -325,65 +394,8 @@ class OBSPluginPageParser(HTMLParser):
 
 
 class OBSPluginDownloader:
-    def __init__(self, platform, repo, plugin_name, download_dir, version_file, config):
-        self.platform = platform
-        self.repo = repo
-        self.plugin_name = plugin_name
-        self.download_dir = download_dir
-        self.version_file = version_file
-        self.config = config
-        self.api_url = self.config[platform]['api_url'].format(repo=repo, plugin=plugin_name)
-        self.file_pattern = self.config[platform]['file_pattern']
-
-    def get_latest_release_info(self):
-        response = requests.get(self.api_url)
-        response.raise_for_status()
-        releases = response.json()
-        latest_release = next((release for release in releases if not release.get('prerelease', False)), None)
-        return latest_release
-
-    def get_current_version(self):
-        if os.path.exists(self.version_file):
-            with open(self.version_file, 'r') as f:
-                return f.read().strip()
-        return None
-
-    def save_current_version(self, version):
-        with open(self.version_file, 'w') as f:
-            f.write(version)
-
-    def download_asset(self, download_url, output_path):
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()
-        with open(output_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-
-    def update_plugin(self):
-        latest_release = self.get_latest_release_info()
-        if not latest_release:
-            print("No releases found.")
-            return
-
-        latest_version = latest_release['tag_name']
-        current_version = self.get_current_version()
-
-        if current_version == latest_version:
-            print(f"You already have the latest version ({current_version}) downloaded.")
-            return
-
-        for asset in latest_release['assets']:
-            if fnmatch.fnmatch(asset['name'], self.file_pattern):
-                download_url = asset['browser_download_url']
-                output_path = os.path.join(self.download_dir, asset['name'])
-                print(f"Downloading {asset['name']}...")
-                self.download_asset(download_url, output_path)
-                print(f"Downloaded to {output_path}")
-
-        self.save_current_version(latest_version)
-        print(f"Updated to version: {latest_version}")
-
+    def __init__(self, plugins_dict):
+        pass
 
 class OBSPluginManager:
     def __init__(self, CFM):
@@ -394,20 +406,18 @@ class OBSPluginManager:
 
 
     def get_online_plugins(self):
-        self.CFM.load_online_cached_plugins()
-
         unix_time = int(time.time())
         div_time = unix_time - int(self.CFM.plugin_cache_time)
         div_soft_time = unix_time - int(self.CFM.plugin_soft_cache_time)
 
         if div_soft_time > self.CFM.plugin_soft_refresh_time or div_time > self.CFM.plugin_refresh_time:
             if div_time > self.CFM.plugin_refresh_time:
-                self.CFM.delete_online_cached_plugins()
-                self.CFM.save_online_cached_plugins(self.scrape_obs_plugins_all())
-                self.CFM.update_plugin_cache_time(unix_time)
+                del self.CFM.online_cached_plugins
+                self.CFM.online_cached_plugins = self.scrape_obs_plugins_all()
+                self.CFM.plugin_cache_time = unix_time
             else:
-                self.CFM.save_online_cached_plugins(self.scrape_obs_plugins())
-            self.CFM.update_plugin_soft_cache_time(unix_time)
+                self.CFM.online_cached_plugins = self.scrape_obs_plugins()
+            self.CFM.plugin_soft_cache_time = unix_time
 
     def scrape_obs_plugins_all(self):
         plugins = {}
@@ -431,10 +441,10 @@ class OBSPluginManager:
             return {}
 
     def plugin_actions_from_data(self, plugins=None, remove=False):
-        installed_plugins = self.CFM.load_installed_plugins()
+        installed_plugins = self.CFM.installed_plugins
         if plugins is None:
             plugin = installed_plugins
-        online_plugins = self.CFM.load_online_cached_plugins()
+        online_plugins = self.CFM.online_cached_plugins
         for plugin_id, plugin in plugins.items():
             online_data = online_plugins.get(plugin_id,{})
             installed_data = installed_plugins.get(plugin_id,{})
@@ -446,9 +456,9 @@ class OBSPluginManager:
                     plugin.update(installed_data)
                     installed_data = plugin
             if remove and installed_data:
-                print(f"Remove plugin with id {plugin_id} here")
+                print(f"Remove plugin with id {plugin_id} {installed_data} here")
             elif online_data:
-                print(f"Install / Update plugin with id {plugin_id} here")
+                print(f"Install / Update plugin with id {plugin_id} {online_data} here")
             # platform = plugin['platform']
             # repo = plugin['repo']
             # plugin_name = plugin['name']
@@ -644,17 +654,17 @@ class OBSPluginManager:
 
 
     def download_plugins(self, querys):
-        online_plugins = self.CFM.load_online_cached_plugins()
+        online_plugins = self.CFM.online_cached_plugins
         to_install = self.match_plugin_querys(online_plugins, querys)
         self.plugin_actions_from_data(to_install)
 
     def remove_plugins(self, querys):
-        installed_plugins = self.CFM.load_installed_plugins()
+        installed_plugins = self.CFM.installed_plugins
         to_remove = self.match_plugin_querys(installed_plugins, querys)
         self.plugin_actions_from_data(to_remove,True)
 
     def query_plugins(self, querys, number_query, sort):
-        online_plugins = self.CFM.load_online_cached_plugins()
+        online_plugins = self.CFM.online_cached_plugins
         if number_query:
             number_conditions = self.parse_number_conditions(number_query)
             online_plugins = self.limit_number_query(online_plugins, number_conditions)
@@ -670,11 +680,11 @@ class OBSPluginManager:
 
 if __name__ == "__main__": # Run the steps
     OSM = OSManager()
-    CFM = ConfigManager(OSM.get_config_path())
+    CFM = ConfigManager(OSM.config_path, OSM.plugins_path)
 
     parser = argparse.ArgumentParser(
         prog='obs-plugin-manager.py',
-        description='A OBS plugin finder and downloader',
+        description='A OBS plugin manager, finder and downloader',
         add_help=False,
         epilog='')
     parser.add_argument('-h', '--help', action='store_true', help='show this help message and exit')
@@ -689,23 +699,23 @@ if __name__ == "__main__": # Run the steps
     #parser.add_argument('-d', '--dignore', action='store_true', help='disable ignore list')
     #parser.add_argument('-g', '--ignoreurl', default='', help='set ignore url')
     parser.add_argument('-p', '--platform-url', dest='platform_url', default=None, help=f'set platform json url (currently: "{CFM.platforms_file_url}")')
-    parser.add_argument('-c', '--config', default=None, help=f'Config file to use (currently: "{CFM.plugins_file}")')
+    parser.add_argument('-c', '--config', default=None, help=f'Config file to use (currently: "{CFM.config_file}")')
 
     args = parser.parse_args()
 
     if args.config:
-        CFM.update_config_file(arg.config)
+        CFM.config_file = arg.config
 
     plugin_args = any([args.query, args.install, args.remove, args.update, args.number_filter])
     action_args = plugin_args or any([args.platform_url])
 
     if not action_args or args.help: # if no args are set or help is used
         parser.print_help() # print help
-        if not any_args: #if no args are set exit
+        if not action_args: #if no args are set exit
             exit(0)
 
     if args.platform_url:
-        CFM.update_platforms_file_url(args.platform_url)
+        CFM.platforms_file_url = args.platform_url
 
     if plugin_args: # if these args are set the plugin manager needs to run
 
